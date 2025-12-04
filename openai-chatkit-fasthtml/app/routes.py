@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Any, Optional
 
-from fasthtml.common import Request, Response, json_resp
+from fasthtml.common import Request, Response
 import httpx
 
 from .config import ChatKitConfig, AppConfig, ThemeConfig, ColorScheme, validate_config
@@ -19,6 +19,41 @@ from .session import (
 
 logger = logging.getLogger(__name__)
 is_production = not AppConfig.DEBUG
+
+
+def json_resp(obj: Any, status_code: int = 200, headers: Optional[dict] = None) -> Response:
+    """Build a JSON Response compatible with fasthtml's Response.
+
+    This helper ensures we always return a Response with a JSON body
+    and the proper Content-Type header. It also preserves any provided
+    headers.
+    """
+    body = json.dumps(obj)
+    # Try to create Response using common signature
+    try:
+        resp = Response(body, status=status_code)
+    except TypeError:
+        # Fallback if Response expects (content, status_code)
+        resp = Response(body, status_code)
+
+    # Ensure headers dict exists and apply JSON content-type
+    try:
+        resp.headers["Content-Type"] = "application/json"
+    except Exception:
+        # If Response doesn't expose headers as dict, try setting attribute
+        try:
+            resp.headers = {"Content-Type": "application/json"}
+        except Exception:
+            pass
+
+    if headers:
+        try:
+            resp.headers.update(headers)
+        except Exception:
+            # If headers isn't a dict or update fails, ignore additional headers
+            pass
+
+    return resp
 
 
 async def handle_create_session(request: Request) -> Response:

@@ -10,6 +10,8 @@
     greeting: document.currentScript?.dataset.greeting || 'How can I help you today?',
   };
 
+  console.log('[ChatKit] Config loaded:', CONFIG);
+
   const chatkitContainer = document.getElementById('chatkit-container');
   const errorOverlay = document.getElementById('error-overlay');
   const errorMessage = document.getElementById('error-message');
@@ -66,6 +68,7 @@
 
   async function createSession() {
     try {
+      console.log('[ChatKit] Creating session...');
       const response = await fetch(CONFIG.sessionEndpoint, {
         method: 'POST',
         headers: {
@@ -82,10 +85,12 @@
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to create session');
+        throw new Error(error.error || `HTTP ${response.status}: Failed to create session`);
       }
 
-      return await response.json();
+      const session = await response.json();
+      console.log('[ChatKit] Session created:', session.id);
+      return session;
     } catch (error) {
       console.error('[ChatKit] Session creation error:', error);
       throw error;
@@ -94,12 +99,27 @@
 
   async function initChatKit() {
     try {
-      // Check if ChatKit is available
+      console.log('[ChatKit] Initializing ChatKit component...');
+      
+      // Wait for ChatKit component to be available (max 5 seconds)
+      let attempts = 0;
+      const maxAttempts = 50; // 50 * 100ms = 5 seconds
+      
+      while (!customElements.get('openai-chatkit') && attempts < maxAttempts) {
+        if (attempts === 0) {
+          console.log('[ChatKit] Waiting for ChatKit web component to load...');
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+      
       if (!customElements.get('openai-chatkit')) {
         showError('ChatKit component not loaded. Please refresh the page.');
+        console.error('[ChatKit] Component "openai-chatkit" not found after 5 seconds');
         return;
       }
 
+      console.log('[ChatKit] ChatKit component loaded after', attempts * 100, 'ms');
       hideError();
 
       // Create session
@@ -107,18 +127,26 @@
       
       // Create ChatKit element
       chatkitElement = document.createElement('openai-chatkit');
-      chatkitElement.sessionToken = session.token;
+      // Use client_secret as the sessionToken for authentication
+      chatkitElement.sessionToken = session.client_secret;
       chatkitElement.placeholder = CONFIG.placeholder;
       chatkitElement.greetingText = CONFIG.greeting;
+      
+      console.log('[ChatKit] ChatKit element created with session:', session.id);
+      console.log('[ChatKit] Using client_secret for authentication');
       
       updateChatkitTheme();
 
       if (chatkitContainer) {
         chatkitContainer.innerHTML = '';
         chatkitContainer.appendChild(chatkitElement);
+        console.log('[ChatKit] ChatKit element mounted to DOM');
+      } else {
+        console.error('[ChatKit] Container not found!');
       }
     } catch (error) {
       showError(`Failed to initialize ChatKit: ${error.message}`);
+      console.error('[ChatKit] Initialization error:', error);
       if (retryButton) {
         retryButton.onclick = initChatKit;
       }
